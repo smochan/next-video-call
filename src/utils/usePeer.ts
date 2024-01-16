@@ -16,7 +16,7 @@ const usePeer = () => {
         setIsLoading(false);
 
         peer.on('open', (id) => {
-          console.log('your device id: ', id);
+          console.log('your peer id = ', id);
           setMyPeerId(id);
         });
 

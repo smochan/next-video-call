@@ -111,7 +111,7 @@ const Room = () => {
     })
 
     streams && socket.on("user-connected", (data) => {
-      // console.log("user-connected", data.myPeerId)
+      console.log("user-connected")
       if (data.userId !== userId) {
         console.log("new user-connected, peerId =", data.myPeerId)
         

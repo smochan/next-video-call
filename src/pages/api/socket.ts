@@ -99,7 +99,7 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
 
   const io = new Server({ path: "/api/socket", addTrailingSlash: false, 
   cors: {
-    origin: "https://localhost:3000",
+    origin: "*",
     methods: ["GET", "POST"] } 
   }).listen(PORT + 1)
 
