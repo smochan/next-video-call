@@ -65,6 +65,7 @@ const Home = () => {
       
       ws.onmessage = (event) => {
         console.log("got someThing", event.data, event);
+
       }
     }
 
@@ -169,6 +170,7 @@ const Home = () => {
           </div>
         </div>
         <div className={styles.main__right}>
+          <h1>Global Chat</h1>
           <div className={styles.main__chat_window}>
             <ul className={styles.messages}></ul>
           </div>

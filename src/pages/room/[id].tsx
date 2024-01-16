@@ -89,6 +89,7 @@ const Room = () => {
     const socket = io(`:${PORT + 1}`, { path: "/api/socket", addTrailingSlash: false })
 
     streams && socket.on("connect", () => {
+      console.log("connected to ws"); 
       if(isPeerReady) {
         peer.on("call", (call: any) => {
           call.answer(streams[0].stream);
