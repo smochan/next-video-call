@@ -87,6 +87,9 @@ interface NextApiResponseWithSocket extends NextApiResponse {
   socket: SocketWithIO
 }
 export default function SocketHandler(_req: NextApiRequest, res: NextApiResponseWithSocket) {
+  res.setHeader('Access-Control-Allow-Origin', 'https://next-video-call-umber.vercel.app');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  
   if (res.socket.server.io) {
     res.status(200).json({ success: true, message: "Socket is already running", socket: `:${PORT + 1}` })
     return
@@ -94,7 +97,11 @@ export default function SocketHandler(_req: NextApiRequest, res: NextApiResponse
 
   console.log("Starting Socket.IO server on port:", PORT + 1)
 
-  const io = new Server({ path: "/api/socket", addTrailingSlash: false, cors: { origin: "*" } }).listen(PORT + 1)
+  const io = new Server({ path: "/api/socket", addTrailingSlash: false, 
+  cors: {
+    origin: "https://localhost:3000",
+    methods: ["GET", "POST"] } 
+  }).listen(PORT + 1)
 
   io.on("connect", socket => {
     // const _socket = socket
