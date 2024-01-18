@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import * as Ably from 'ably';
-import { AblyProvider, useChannel, usePresence } from 'ably/react';
+import { AblyProvider, useChannel} from 'ably/react';
 import usePeer from '../utils/usePeer';
 
 import styles from '@@/styles/Room.module.css'
@@ -26,18 +26,29 @@ const ChatRoom = () =>{
 
 const ChatRoomClient = (props: {userId: string}) => {
   const userId = props.userId;
-  const [streams, setStreams] = useState<MediaStream[]>([]);
-  const [msg, setMsg] = useState<string>("");
+  const [streams, setStreams] = useState<Array<{stream: MediaStream, peerId: string}>>([]);
   const [chats, setChats] = useState<Array<{message: string, name: string, id: string}>>([]);
   const [name, setName] = useState<{saved: boolean, name: string}>({saved: false, name: ""});
 
-  const { channel } = useChannel('new-message', (data) => {
-    console.log("new message received: ", data.data, " clientId: ", data.clientId);
-      setChats(prev => [...prev, {message: data.data.message, name: data.data.name, id: data.clientId}])
+  const nameRef = useRef<HTMLInputElement>(null);
+  const msgRef = useRef<HTMLInputElement>(null);
+
+  const { peer, myPeerId, isPeerReady } = usePeer();
+
+  const { channel } = useChannel('global-chat', (data) => {
+    console.log("new message received: ", data.data, " clientId: ", data.clientId, "stream length: ", streams.length);
+    const action = data.data.action;
+      if(action === 'send-message') setChats(prev => [...prev, {message: data.data.message, name: data.data.name, id: data.clientId}])
+      if(action === 'join-room' && isPeerReady && data.data.peerId!== myPeerId) {
+        const call = peer.call(data.data.peerId, streams[0]?.stream, {metadata: {peerId: myPeerId}});
+        call.on("stream", (userVideoStream: MediaStream) => {
+          console.log("making call.....")
+          setStreams(prev => [...prev, {stream: userVideoStream, peerId: data.data.peerId}]);
+        })
+      }
   })
 
 
-  const { peer, myPeerId, isPeerReady } = usePeer();
 
   const handleSelfStream = (device: string) => {
       const videoElement = document.getElementById(userId) as HTMLVideoElement;
@@ -48,7 +59,7 @@ const ChatRoomClient = (props: {userId: string}) => {
         }
         if(device === "camera") {
           if(videoElement.srcObject == null){
-            videoElement.srcObject = streams[0];
+            videoElement.srcObject = streams[0].stream;
             videoElement.play();
           }
           else{
@@ -58,32 +69,46 @@ const ChatRoomClient = (props: {userId: string}) => {
     }
   }
 
+
   useEffect(() => {
     const getOwnVideo = async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: true,
       });
-      setStreams([stream]);
+      setStreams([{stream: stream, peerId: myPeerId}]);
     }
-    getOwnVideo();
 
-  }, []);
+    if(isPeerReady && myPeerId !== '') {
+      getOwnVideo();
+      channel.publish('global-chat', { action: "join-room", name: name.name, peerId: myPeerId });
+    }
 
-  // useEffect(() => {
-  //   if(isPeerReady){
-  //     peer.on("call", (call: any) => {
-  //       call.answer(streams[0]);
+  }, [isPeerReady, myPeerId]);
+
+  const makePeerConnection = () => {
+    if(isPeerReady) {
+
+    console.log("Set to receive call")
+      peer.on("call", (call: any) => {
+        console.log("getting calll.......", streams.length);
+        call.answer(streams[0]?.stream);
         
-  //       call.on("stream", (userVideoStream: MediaStream) => {
-  //         console.log("getting calll.......")
-  //         // handleStreams(userVideoStream, call.metadata.userId);
-  //         setStreams(prev => [...prev, userVideoStream]);
-  //       })
-  //     })
-  //   }
+        call.on("stream", (userVideoStream: MediaStream) => {
+          console.log("setting call")
+          // handleStreams(userVideoStream, call.metadata.userId);
+          setStreams(prev => [...prev, {stream: userVideoStream, peerId: call.metadata.peerId}]);
+        })
+      })
+      // console.log("inside if");
+    }
+}
 
-  // }, [isPeerReady]);
+  useEffect(() => {
+    console.log("isPeerReady", isPeerReady);
+    if( streams && streams.length === 1 ) makePeerConnection();
+
+  }, [isPeerReady, streams])
 
   return (
     <>
@@ -91,11 +116,11 @@ const ChatRoomClient = (props: {userId: string}) => {
           <div className={styles.videos__group}>
             <div className={styles.video_grid}>
               { streams.length ? streams.map((stream, index) => (
-                <video  id={userId} key={index} className={styles.video} muted autoPlay ref={(videoRef) => {
+                index%2 == 0 ? <video  id={stream.peerId} key={index} className={styles.video} muted autoPlay ref={(videoRef) => {
                   if (videoRef) {
-                    videoRef.srcObject = stream;
+                    videoRef.srcObject = stream.stream;
                   }
-                }} />
+                }} /> : ""
               )) : <p>no stream</p>
               }
             </div>
@@ -123,10 +148,11 @@ const ChatRoomClient = (props: {userId: string}) => {
                   id="chat_message"
                   type="text"
                   placeholder="Add Name"
-                  onChange={(e) => setName({saved: false, name: e.target.value})}
-                  value={name.name}
+                  // onChange={(e) => setName({saved: false, name: e.target.value})}
+                  ref={nameRef}
+                  // value={name.name}
                 />
-                <div className={styles.options__button} onClick={() => setName({saved: true, name: name.name})}>
+                <div className={styles.options__button} onClick={() => nameRef.current?.value && setName({saved: true, name: nameRef.current.value})}>
                   <i className="fa fa-plus" aria-hidden="true">
                     Save
                   </i>
@@ -139,26 +165,25 @@ const ChatRoomClient = (props: {userId: string}) => {
         <div className={styles.main__right}>
           <h1>Global Chat</h1>
           <div className={styles.main__chat_window}>
-
-          {chats.length && chats.map((msg, index) => (
-              <ul className={styles.messages} key={index}>{msg.message} <span> : {msg.name}</span></ul>
-            )) 
-          }
-
-            <ul className={styles.messages}></ul>
+            {chats.length && chats.map((msg, index) => (
+                <ul className={styles.messages} key={index}>{msg.message} : {msg.name}</ul>
+              )) 
+            }
           </div>
           <div className={styles.main__message_container}>
             <input
               id="chat_message"
               type="text"
               placeholder="Enter your message"
-              onChange={(e) => setMsg(e.target.value)}
+              // onChange={(e) => setMsg(e.target.value)}
+              ref={msgRef}
             />
-            <div className={styles.options__button} onClick={() => channel.publish('new-message', {message: msg, name: name.saved ? name.name : "No-name"})}>
+            { channel !== undefined && <div className={styles.options__button} onClick={() => msgRef.current?.value && channel.publish('global-chat', {message: msgRef.current.value, action: "send-message", name: name.saved ? name.name : "No-name"})}>
               <i className="fa fa-plus" aria-hidden="true">
                 send
               </i>
             </div>
+            }
           </div>
         </div>
     </ >
